@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EMF Viewer</title>
+<style>
+  :root {
+    --ink: #1d2025; --muted: #646a73; --line: #dcdde0; --bar: #fafafa;
+    --hover: #f0f1f3; --accent: #0b63ce; --danger: #b42318;
+  }
+  html, body { margin: 0; height: 100%; font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); }
+  body { display: flex; flex-direction: column; }
+  header { display: flex; gap: 12px; align-items: center; height: 48px; padding: 0 12px; box-sizing: border-box;
+           background: var(--bar); border-bottom: 1px solid var(--line); }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 30px; min-width: 30px; padding: 0 10px;
+         box-sizing: border-box; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--ink);
+         font: inherit; font-weight: 500; cursor: pointer; transition: background-color .12s, border-color .12s; }
+  .btn:hover { background: var(--hover); }
+  .btn:active { background: #e6e7ea; }
+  .btn:disabled { color: #a3a7ad; background: #fff; cursor: default; }
+  .btn:focus-visible, #file:focus-visible + .btn { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn svg { width: 16px; height: 16px; flex: none; }
+  .btn.primary { background: var(--ink); border-color: var(--ink); color: #fff; }
+  .btn.primary:hover { background: #343941; }
+  .group { display: inline-flex; }
+  .group .btn { border-radius: 0; padding: 0 8px; }
+  .group .btn + .btn { margin-left: -1px; }
+  .group .btn:first-child { border-radius: 6px 0 0 6px; }
+  .group .btn:last-child { border-radius: 0 6px 6px 0; }
+  .group .btn:focus-visible { position: relative; z-index: 1; }
+  #zoom { min-width: 58px; font-variant-numeric: tabular-nums; }
+  .sep { width: 1px; height: 20px; background: var(--line); }
+  .name { margin-left: auto; min-width: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #error { color: var(--danger); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #error:empty { display: none; }
+  #view { flex: 1; position: relative; overflow: hidden; background: #fff; cursor: grab; touch-action: none;
+          background-image: linear-gradient(45deg,#f3f3f4 25%,transparent 25%,transparent 75%,#f3f3f4 75%),linear-gradient(45deg,#f3f3f4 25%,transparent 25%,transparent 75%,#f3f3f4 75%);
+          background-size: 20px 20px; background-position: 0 0, 10px 10px; }
+  #view.dragging { cursor: grabbing; }
+  #view > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #hint { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 8px; align-items: center; justify-content: center;
+          color: var(--muted); text-align: center; pointer-events: none; }
+  #hint strong { color: var(--ink); font-size: 16px; font-weight: 600; }
+  #hint svg { width: 40px; height: 40px; color: #b4b8be; margin-bottom: 4px; }
+  #view.over { outline: 2px dashed var(--accent); outline-offset: -8px; background-color: #f2f7fd; }
+  @media (max-width: 520px) {
+    header { gap: 8px; padding: 0 8px; }
+    .btn .label, .sep { display: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <input type="file" id="file" class="sr-only" accept=".emf,image/emf,image/x-emf">
+  <label for="file" class="btn primary" title="Open an EMF file">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M1.75 3.75h4l1.5 1.5h7v7.5H1.75z"/></svg>
+    <span class="label">Open</span>
+  </label>
+  <span class="sep"></span>
+  <div class="group" role="group" aria-label="Zoom">
+    <button class="btn" id="zoomOut" title="Zoom out" aria-label="Zoom out" disabled>
+      <svg viewBox="0 0 16 16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M3.5 8h9"/></svg>
+    </button>
+    <button class="btn" id="zoom" title="Fit to window" aria-label="Zoom level, click to fit" disabled>–</button>
+    <button class="btn" id="zoomIn" title="Zoom in" aria-label="Zoom in" disabled>
+      <svg viewBox="0 0 16 16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M3.5 8h9M8 3.5v9"/></svg>
+    </button>
+  </div>
+  <button class="btn" id="fit" title="Fit to window (double-click)" disabled>
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 5.5V2h3.5M10.5 2H14v3.5M14 10.5V14h-3.5M5.5 14H2v-3.5"/></svg>
+    <span class="label">Fit</span>
+  </button>
+  <span id="error" role="alert"></span>
+  <span class="name" id="name"></span>
+</header>
+<div id="view">
+  <div id="hint">
+    <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M10 4h14l8 8v24H10z"/><path d="M24 4v8h8M15 30l5-8 4 5 2-3 3 6z"/></svg>
+    <strong>Open or drop an EMF file</strong>
+    <span>Scroll to zoom · drag to pan · double-click to fit</span>
+  </div>
+</div>
+
+<script src="emfjs.js?v=3"></script>
+<script>
+const view = document.getElementById('view');
+const hint = document.getElementById('hint');
+const errorEl = document.getElementById('error');
+const zoomEl = document.getElementById('zoom');
+let svg = null, bbox = null, vb = null;
+
+function loadEmf(buffer, name) {
+  errorEl.textContent = '';
+  try {
+    const dv = new DataView(buffer);
+    // EMF header rclBounds (device units) at offset 8
+    const w = Math.max(1, dv.getInt32(16, true)) || 1000;
+    const h = Math.max(1, dv.getInt32(20, true)) || 1000;
+    const renderer = new EMFJS.Renderer(buffer);
+    const el = renderer.render({ width: '100%', height: '100%', wExt: w, hExt: h, xExt: w, yExt: h, mapMode: 8 });
+    if (svg) svg.remove();
+    svg = el;
+    svg.setAttribute('preserveAspectRatio', 'none');
+    view.appendChild(svg);
+    hint.style.display = 'none';
+    const b = svg.getBBox();
+    bbox = (b.width > 0 && b.height > 0) ? { x: b.x, y: b.y, w: b.width, h: b.height } : { x: 0, y: 0, w, h };
+    document.getElementById('name').textContent = name || '';
+    document.getElementById('name').title = name || '';
+    document.querySelectorAll('header button').forEach(b => b.disabled = false);
+    fit();
+  } catch (e) {
+    console.error(e);
+    errorEl.textContent = 'Could not render file: ' + (e.message || e);
+  }
+}
+
+function apply() {
+  if (!svg) return;
+  svg.setAttribute('viewBox', [vb.x, vb.y, vb.w, vb.h].join(' '));
+  zoomEl.textContent = Math.round(view.clientWidth / vb.w / fitScale() * 100) + '%';
+}
+
+function fitScale() {
+  const pad = 0.95;
+  return Math.min(view.clientWidth / bbox.w, view.clientHeight / bbox.h) * pad;
+}
+
+function fit() {
+  if (!svg) return;
+  const s = fitScale();
+  const w = view.clientWidth / s, h = view.clientHeight / s;
+  vb = { x: bbox.x + bbox.w / 2 - w / 2, y: bbox.y + bbox.h / 2 - h / 2, w, h };
+  apply();
+}
+
+function zoomAt(factor, mx, my) {
+  if (!svg) return;
+  const fx = mx / view.clientWidth, fy = my / view.clientHeight;
+  const px = vb.x + fx * vb.w, py = vb.y + fy * vb.h;
+  vb.w /= factor; vb.h /= factor;
+  vb.x = px - fx * vb.w; vb.y = py - fy * vb.h;
+  apply();
+}
+
+view.addEventListener('wheel', e => {
+  e.preventDefault();
+  const r = view.getBoundingClientRect();
+  zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
+}, { passive: false });
+
+// Pan with mouse/touch; pinch-zoom with two fingers
+const pointers = new Map();
+let lastDist = 0;
+view.addEventListener('pointerdown', e => {
+  view.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  view.classList.add('dragging');
+});
+view.addEventListener('pointermove', e => {
+  if (!pointers.has(e.pointerId) || !svg) return;
+  const prev = pointers.get(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size === 1) {
+    vb.x -= (e.clientX - prev.x) * vb.w / view.clientWidth;
+    vb.y -= (e.clientY - prev.y) * vb.h / view.clientHeight;
+    apply();
+  } else if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    const dist = Math.hypot(a.x - b.x, a.y - b.y);
+    if (lastDist) {
+      const r = view.getBoundingClientRect();
+      zoomAt(dist / lastDist, (a.x + b.x) / 2 - r.left, (a.y + b.y) / 2 - r.top);
+    }
+    lastDist = dist;
+  }
+});
+function endPointer(e) {
+  pointers.delete(e.pointerId);
+  lastDist = 0;
+  if (!pointers.size) view.classList.remove('dragging');
+}
+view.addEventListener('pointerup', endPointer);
+view.addEventListener('pointercancel', endPointer);
+view.addEventListener('dblclick', fit);
+
+const center = () => [view.clientWidth / 2, view.clientHeight / 2];
+document.getElementById('zoomIn').onclick = () => zoomAt(1.25, ...center());
+document.getElementById('zoomOut').onclick = () => zoomAt(0.8, ...center());
+document.getElementById('fit').onclick = fit;
+zoomEl.onclick = fit;
+
+// Keep zoom/center when the window resizes
+let lastSize = [view.clientWidth, view.clientHeight];
+new ResizeObserver(() => {
+  const [w, h] = [view.clientWidth, view.clientHeight];
+  if (vb && lastSize[0] && lastSize[1]) {
+    const cx = vb.x + vb.w / 2, cy = vb.y + vb.h / 2;
+    vb.w *= w / lastSize[0]; vb.h *= h / lastSize[1];
+    vb.x = cx - vb.w / 2; vb.y = cy - vb.h / 2;
+    apply();
+  }
+  lastSize = [w, h];
+}).observe(view);
+
+function openFile(file) {
+  if (!file) return;
+  file.arrayBuffer().then(buf => loadEmf(buf, file.name));
+}
+document.getElementById('file').addEventListener('change', e => openFile(e.target.files[0]));
+view.addEventListener('dragover', e => { e.preventDefault(); view.classList.add('over'); });
+view.addEventListener('dragleave', () => view.classList.remove('over'));
+view.addEventListener('drop', e => {
+  e.preventDefault();
+  view.classList.remove('over');
+  openFile(e.dataTransfer.files[0]);
+});
+
+// Optional: load a file via ?url=path/to/file.emf
+const url = new URLSearchParams(location.search).get('url');
+if (url) fetch(url).then(r => r.arrayBuffer()).then(buf => loadEmf(buf, url.split('/').pop()))
+  .catch(e => errorEl.textContent = 'Could not load ' + url + ': ' + e.message);
+</script>
+</body>
+</html>
