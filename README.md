@@ -8,6 +8,7 @@ A tiny static web page for viewing Windows Enhanced Metafiles (`.emf`) and SVG f
 
 - Click **Open** or drop an `.emf` or `.svg` file onto the page.
 - Scroll or pinch to zoom, drag to pan, double-click (or **Fit**) to fit the window.
+- For SVG files, click **Edit** to change line widths, line/fill colors, fonts and font sizes. Each distinct value found in the file gets its own control; **Download** saves the edited SVG.
 - Load a file by URL: `index.html?url=path/to/file.emf` or `.svg` (same origin or CORS-enabled).
 
 ## How it works

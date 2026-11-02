@@ -35,7 +35,8 @@
   .name { margin-left: auto; min-width: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #error { color: var(--danger); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #error:empty { display: none; }
-  #view { flex: 1; position: relative; overflow: hidden; background: #fff; cursor: grab; touch-action: none;
+  main { flex: 1; display: flex; min-height: 0; }
+  #view { flex: 1; min-width: 0; position: relative; overflow: hidden; background: #fff; cursor: grab; touch-action: none;
           background-image: linear-gradient(45deg,#f3f3f4 25%,transparent 25%,transparent 75%,#f3f3f4 75%),linear-gradient(45deg,#f3f3f4 25%,transparent 25%,transparent 75%,#f3f3f4 75%);
           background-size: 20px 20px; background-position: 0 0, 10px 10px; }
   #view.dragging { cursor: grabbing; }
@@ -45,16 +46,39 @@
   #hint strong { color: var(--ink); font-size: 16px; font-weight: 600; }
   #hint svg { width: 40px; height: 40px; color: #b4b8be; margin-bottom: 4px; }
   #view.over { outline: 2px dashed var(--accent); outline-offset: -8px; background-color: #f2f7fd; }
+  .btn[aria-pressed="true"] { background: #e6e7ea; border-color: #c4c6ca; }
+  #panel { width: 300px; flex: none; overflow-y: auto; background: var(--bar); border-left: 1px solid var(--line); }
+  #panel[hidden] { display: none; }
+  .panel-head { position: sticky; top: 0; z-index: 1; display: flex; gap: 8px; align-items: center; padding: 10px 12px;
+                background: var(--bar); border-bottom: 1px solid var(--line); }
+  .panel-head strong { margin-right: auto; font-weight: 600; }
+  #props section { padding: 12px; border-bottom: 1px solid var(--line); }
+  #props h3 { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  #props .empty { padding: 16px 12px; color: var(--muted); }
+  .row { display: flex; gap: 8px; align-items: center; min-height: 32px; }
+  .row + .row { margin-top: 4px; }
+  .row .count { flex: none; min-width: 34px; color: var(--muted); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+  .row input[type=range] { flex: 1; min-width: 0; accent-color: var(--ink); }
+  .row input[type=number], .row input[type=text] { height: 28px; box-sizing: border-box; padding: 0 6px; border: 1px solid var(--line);
+       border-radius: 6px; background: #fff; color: var(--ink); font: inherit; }
+  .row input[type=number] { width: 64px; font-variant-numeric: tabular-nums; }
+  .row input[type=text] { flex: 1; min-width: 0; }
+  .row .unit { width: 18px; color: var(--muted); font-size: 12px; }
+  .row input[type=color] { width: 32px; height: 28px; flex: none; padding: 2px; border: 1px solid var(--line); border-radius: 6px; background: #fff; cursor: pointer; }
+  .row .hex { flex: 1; font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+  .row input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   @media (max-width: 520px) {
     header { gap: 8px; padding: 0 8px; }
     .btn .label, .sep { display: none; }
+    main { flex-direction: column; }
+    #panel { width: auto; height: 45%; border-left: 0; border-top: 1px solid var(--line); }
   }
 </style>
 </head>
 <body>
 <header>
-  <input type="file" id="file" class="sr-only"   accept=".emf,.svg,image/emf,image/x-emf,image/svg+xml">
-    <label for="file" class="btn primary" title="Open an EMF or SVG file">
+  <input type="file" id="file" class="sr-only" accept=".emf,.svg,image/emf,image/x-emf,image/svg+xml">
+  <label for="file" class="btn primary" title="Open an EMF or SVG file">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M1.75 3.75h4l1.5 1.5h7v7.5H1.75z"/></svg>
     <span class="label">Open</span>
   </label>
@@ -72,16 +96,39 @@
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 5.5V2h3.5M10.5 2H14v3.5M14 10.5V14h-3.5M5.5 14H2v-3.5"/></svg>
     <span class="label">Fit</span>
   </button>
+  <span class="sep"></span>
+  <button class="btn" id="edit" title="Edit SVG properties" aria-pressed="false" aria-controls="panel" disabled>
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12"/><circle cx="5" cy="4" r="1.5" fill="#fff"/><circle cx="11" cy="8" r="1.5" fill="#fff"/><circle cx="7" cy="12" r="1.5" fill="#fff"/></svg>
+    <span class="label">Edit</span>
+  </button>
   <span id="error" role="alert"></span>
   <span class="name" id="name"></span>
 </header>
-<div id="view">
-  <div id="hint">
-    <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M10 4h14l8 8v24H10z"/><path d="M24 4v8h8M15 30l5-8 4 5 2-3 3 6z"/></svg>
-    <strong>Open or drop an EMF or SVG file</strong>
-    <span>Scroll to zoom · drag to pan · double-click to fit</span>
+<main>
+  <div id="view">
+    <div id="hint">
+      <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M10 4h14l8 8v24H10z"/><path d="M24 4v8h8M15 30l5-8 4 5 2-3 3 6z"/></svg>
+      <strong>Open or drop an EMF or SVG file</strong>
+      <span>Scroll to zoom · drag to pan · double-click to fit</span>
+    </div>
   </div>
-</div>
+  <aside id="panel" aria-label="SVG properties" hidden>
+    <div class="panel-head">
+      <strong>Properties</strong>
+      <button class="btn" id="reset" title="Undo all edits">Reset</button>
+      <button class="btn primary" id="download" title="Download the edited SVG">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v8.5M4.5 7 8 10.5 11.5 7M2.5 13.5h11"/></svg>
+        Download
+      </button>
+    </div>
+    <div id="props"></div>
+  </aside>
+</main>
+<datalist id="fonts">
+  <option>Arial</option><option>Helvetica</option><option>Segoe UI</option><option>Calibri</option><option>Verdana</option>
+  <option>Tahoma</option><option>Times New Roman</option><option>Georgia</option><option>Courier New</option><option>Consolas</option>
+  <option>sans-serif</option><option>serif</option><option>monospace</option>
+</datalist>
 
 <script src="emfjs.js?v=3"></script>
 <script>
@@ -136,6 +183,7 @@ function loadEmf(buffer, name) {
     const b = s.getBBox();
     return (b.width > 0 && b.height > 0) ? { x: b.x, y: b.y, w: b.width, h: b.height } : { x: 0, y: 0, w, h };
   }, name);
+  setEditor(null);
 }
 
 // Length in px for absolute units; null for percentages or missing values
@@ -147,12 +195,17 @@ function svgLength(v) {
   return n > 0 ? n : null;
 }
 
-function loadSvg(buffer, name) {
-  const text = new TextDecoder().decode(buffer);
-  const doc = new DOMParser().parseFromString(text, 'image/svg+xml');
+function parseSvg(buffer) {
+  const doc = new DOMParser().parseFromString(new TextDecoder().decode(buffer), 'image/svg+xml');
   const root = doc.documentElement;
   if (doc.querySelector('parsererror') || root.namespaceURI !== SVG_NS || root.localName !== 'svg')
     throw new Error('not an EMF or SVG file');
+  return doc;
+}
+
+function loadSvg(buffer, name) {
+  const doc = parseSvg(buffer);
+  const root = doc.documentElement;
   const vbox = (root.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
   const hasVb = vbox.length === 4 && vbox[2] > 0 && vbox[3] > 0;
   let w = svgLength(root.getAttribute('width')), h = svgLength(root.getAttribute('height'));
@@ -170,7 +223,223 @@ function loadSvg(buffer, name) {
   img.addEventListener('error', () => { errorEl.textContent = 'Could not render file: invalid SVG'; });
   el.appendChild(img);
   show(el, () => ({ x: 0, y: 0, w, h }), name, url);
+  setEditor({ buffer, name, doc, img });
 }
+
+// ---- SVG property editor ----
+// Edits are applied to a parsed copy of the file, which is re-serialized and shown as an image again.
+const PROPS = [
+  { prop: 'stroke-width', title: 'Line widths', kind: 'number' },
+  { prop: 'stroke', title: 'Line colors', kind: 'color' },
+  { prop: 'fill', title: 'Fill colors', kind: 'color' },
+  { prop: 'font-family', title: 'Fonts', kind: 'text' },
+  { prop: 'font-size', title: 'Font sizes', kind: 'number' },
+];
+const NUM_RE = /^([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)\s*([a-z%]*)$/i;
+const NON_COLORS = new Set(['none', 'currentcolor', 'inherit', 'initial', 'unset', 'revert', 'transparent', 'context-fill', 'context-stroke']);
+const panel = document.getElementById('panel');
+const propsEl = document.getElementById('props');
+const editBtn = document.getElementById('edit');
+let editor = null, renderSeq = 0, renderQueued = false;
+
+const colorCtx = document.createElement('canvas').getContext('2d');
+// Returns { hex: '#rrggbb', alpha } or null if not a plain color
+function parseColor(v) {
+  v = v.trim();
+  if (!v || NON_COLORS.has(v.toLowerCase()) || /^url\(|var\(/i.test(v)) return null;
+  colorCtx.fillStyle = '#010203'; colorCtx.fillStyle = v;
+  const a = colorCtx.fillStyle;
+  colorCtx.fillStyle = '#030201'; colorCtx.fillStyle = v;
+  if (a !== colorCtx.fillStyle) return null;
+  if (a[0] === '#') return { hex: a, alpha: 1 };
+  const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/.exec(a);
+  if (!m) return null;
+  return { hex: '#' + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join(''), alpha: m[4] == null ? 1 : +m[4] };
+}
+function colorValue(hex, alpha) {
+  if (alpha >= 1) return hex;
+  const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+// Style attribute helpers that leave unrelated declarations untouched
+function styleDecls(el) {
+  const out = new Map();
+  for (const part of (el.getAttribute('style') || '').split(';')) {
+    const i = part.indexOf(':');
+    if (i > 0) out.set(part.slice(0, i).trim().toLowerCase(), part.slice(i + 1).trim());
+  }
+  return out;
+}
+function setStyleDecl(el, prop, value) {
+  const re = new RegExp('(^|;)(\\s*' + prop + '\\s*:)[^;]*', 'i');
+  el.setAttribute('style', (el.getAttribute('style') || '').replace(re, (_, a, b) => a + b + value));
+}
+
+function scanSvg(doc) {
+  const groups = new Map();
+  const add = (def, raw, set, count) => {
+    let key, value;
+    if (def.kind === 'number') {
+      const m = NUM_RE.exec(raw.trim());
+      if (!m) return;
+      value = { num: parseFloat(m[1]), unit: m[2] };
+      key = value.num + value.unit;
+    } else if (def.kind === 'color') {
+      value = parseColor(raw);
+      if (!value) return;
+      key = colorValue(value.hex, value.alpha);
+    } else {
+      value = raw.trim();
+      if (!value || /^(inherit|initial|unset)$/i.test(value)) return;
+      key = value.replace(/"/g, "'");
+    }
+    const id = def.prop + '|' + key;
+    let g = groups.get(id);
+    if (!g) groups.set(id, g = { def, value, label: key, count: 0, setters: [] });
+    g.count += count;
+    g.setters.push(set);
+  };
+
+  for (const el of doc.getElementsByTagNameNS(SVG_NS, '*')) {
+    const decls = styleDecls(el);
+    for (const def of PROPS) {
+      if (decls.has(def.prop)) add(def, decls.get(def.prop), v => setStyleDecl(el, def.prop, v), 1);
+      else if (el.hasAttribute(def.prop)) add(def, el.getAttribute(def.prop), v => el.setAttribute(def.prop, v), 1);
+    }
+  }
+
+  for (const styleEl of doc.getElementsByTagNameNS(SVG_NS, 'style')) {
+    const sheet = new CSSStyleSheet();
+    try { sheet.replaceSync(styleEl.textContent); } catch { continue; }
+    const commit = () => { styleEl.textContent = [...sheet.cssRules].map(r => r.cssText).join('\n'); };
+    for (const rule of sheet.cssRules) {
+      if (!(rule instanceof CSSStyleRule)) continue;
+      let n = 0;
+      try { n = doc.querySelectorAll(rule.selectorText).length; } catch {}
+      if (!n) continue;
+      for (const def of PROPS) {
+        const v = rule.style.getPropertyValue(def.prop);
+        if (v) add(def, v, x => { rule.style.setProperty(def.prop, x, rule.style.getPropertyPriority(def.prop)); commit(); }, n);
+      }
+    }
+  }
+
+  // Text without any font settings uses the renderer default; offer it as a root-level setting
+  const texts = doc.getElementsByTagNameNS(SVG_NS, 'text').length;
+  const has = prop => [...groups.values()].some(g => g.def.prop === prop);
+  const root = doc.documentElement;
+  if (texts && !has('font-family'))
+    groups.set('font-family|', { def: PROPS[3], value: '', label: 'default', count: texts, setters: [v => root.setAttribute('font-family', v)] });
+  if (texts && !has('font-size'))
+    groups.set('font-size|', { def: PROPS[4], value: { num: 16, unit: 'px' }, label: 'default', count: texts, setters: [v => root.setAttribute('font-size', v)] });
+  return groups;
+}
+
+function h(tag, attrs = {}, ...children) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v);
+  }
+  el.append(...children);
+  return el;
+}
+
+function buildControl(g) {
+  const set = v => { g.setters.forEach(s => s(v)); scheduleRender(); };
+  const count = h('span', { class: 'count', title: g.count + ' element' + (g.count === 1 ? '' : 's') }, '×' + g.count);
+  const name = g.def.prop + ' ' + g.label;
+  if (g.def.kind === 'color') {
+    const hex = h('span', { class: 'hex' }, g.label);
+    const input = h('input', { type: 'color', value: g.value.hex, 'aria-label': name, oninput: () => {
+      const v = colorValue(input.value, g.value.alpha);
+      hex.textContent = v;
+      set(v);
+    } });
+    return h('div', { class: 'row' }, input, hex, count);
+  }
+  if (g.def.kind === 'text') {
+    const input = h('input', { type: 'text', value: g.value, placeholder: 'default', list: 'fonts', 'aria-label': name, spellcheck: 'false',
+      oninput: () => { if (input.value.trim()) set(input.value.trim()); } });
+    return h('div', { class: 'row' }, input, count);
+  }
+  const { num, unit } = g.value;
+  const max = num > 0 ? +(num * 4).toPrecision(3) : 10;
+  const step = +(max / 200).toPrecision(2);
+  const range = h('input', { type: 'range', min: 0, max, step, value: num, 'aria-label': name });
+  const box = h('input', { type: 'number', min: 0, step: 'any', value: num, 'aria-label': name });
+  range.addEventListener('input', () => { box.value = range.value; set(range.value + unit); });
+  box.addEventListener('input', () => {
+    if (box.value === '' || +box.value < 0) return;
+    if (+box.value > +range.max) range.max = box.value;
+    range.value = box.value;
+    set(box.value + unit);
+  });
+  return h('div', { class: 'row' }, range, box, h('span', { class: 'unit' }, unit), count);
+}
+
+function buildPanel() {
+  propsEl.replaceChildren();
+  const groups = [...scanSvg(editor.doc).values()];
+  for (const def of PROPS) {
+    const list = groups.filter(g => g.def === def)
+      .sort((a, b) => def.kind === 'number' ? a.value.num - b.value.num : b.count - a.count);
+    if (list.length) propsEl.append(h('section', {}, h('h3', {}, def.title), ...list.map(buildControl)));
+  }
+  if (!propsEl.childElementCount) propsEl.append(h('p', { class: 'empty' }, 'No editable line, color or font properties found.'));
+}
+
+function serialize() {
+  return new XMLSerializer().serializeToString(editor.doc);
+}
+
+function scheduleRender() {
+  if (renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(() => {
+    renderQueued = false;
+    const seq = ++renderSeq, ed = editor;
+    const url = URL.createObjectURL(new Blob([serialize()], { type: 'image/svg+xml' }));
+    // Decode off-screen first so the view doesn't flash while the new image loads
+    const pre = new Image();
+    pre.src = url;
+    pre.decode().catch(() => {}).then(() => {
+      if (seq !== renderSeq || ed !== editor) return URL.revokeObjectURL(url);
+      ed.img.setAttribute('href', url);
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+      blobUrl = url;
+    });
+  });
+}
+
+function setEditor(ed) {
+  editor = ed;
+  renderSeq++;
+  editBtn.disabled = !ed;
+  editBtn.title = ed ? 'Edit SVG properties' : 'Editing is available for SVG files';
+  if (ed) buildPanel();
+  else togglePanel(false);
+}
+
+function togglePanel(open) {
+  panel.hidden = !open;
+  editBtn.setAttribute('aria-pressed', open);
+}
+
+editBtn.onclick = () => togglePanel(panel.hidden);
+document.getElementById('reset').onclick = () => {
+  editor.doc = parseSvg(editor.buffer);
+  buildPanel();
+  scheduleRender();
+};
+document.getElementById('download').onclick = () => {
+  const xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + serialize();
+  const a = h('a', { href: URL.createObjectURL(new Blob([xml], { type: 'image/svg+xml' })),
+                     download: (editor.name || 'image').replace(/\.svg$/i, '') + '-edited.svg' });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
 
 function apply() {
   if (!svg) return;
