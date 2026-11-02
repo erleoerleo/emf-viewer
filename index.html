@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>EMF Viewer</title>
+<title>EMF & SVG Viewer</title>
 <style>
   :root {
     --ink: #1d2025; --muted: #646a73; --line: #dcdde0; --bar: #fafafa;
@@ -53,8 +53,8 @@
 </head>
 <body>
 <header>
-  <input type="file" id="file" class="sr-only" accept=".emf,image/emf,image/x-emf">
-  <label for="file" class="btn primary" title="Open an EMF file">
+  <input type="file" id="file" class="sr-only"   accept=".emf,.svg,image/emf,image/x-emf,image/svg+xml">
+    <label for="file" class="btn primary" title="Open an EMF or SVG file">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M1.75 3.75h4l1.5 1.5h7v7.5H1.75z"/></svg>
     <span class="label">Open</span>
   </label>
@@ -78,7 +78,7 @@
 <div id="view">
   <div id="hint">
     <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M10 4h14l8 8v24H10z"/><path d="M24 4v8h8M15 30l5-8 4 5 2-3 3 6z"/></svg>
-    <strong>Open or drop an EMF file</strong>
+    <strong>Open or drop an EMF or SVG file</strong>
     <span>Scroll to zoom · drag to pan · double-click to fit</span>
   </div>
 </div>
@@ -89,32 +89,87 @@ const view = document.getElementById('view');
 const hint = document.getElementById('hint');
 const errorEl = document.getElementById('error');
 const zoomEl = document.getElementById('zoom');
-let svg = null, bbox = null, vb = null;
+let svg = null, bbox = null, vb = null, blobUrl = null;
+const SVG_NS = 'http://www.w3.org/2000/svg';
 
-function loadEmf(buffer, name) {
+function isEmf(buffer) {
+  // EMR_HEADER record type 1 with " EMF" signature at offset 40
+  if (buffer.byteLength < 44) return false;
+  const dv = new DataView(buffer);
+  return dv.getUint32(0, true) === 1 && dv.getUint32(40, true) === 0x464D4520;
+}
+
+function load(buffer, name) {
   errorEl.textContent = '';
   try {
-    const dv = new DataView(buffer);
-    // EMF header rclBounds (device units) at offset 8
-    const w = Math.max(1, dv.getInt32(16, true)) || 1000;
-    const h = Math.max(1, dv.getInt32(20, true)) || 1000;
-    const renderer = new EMFJS.Renderer(buffer);
-    const el = renderer.render({ width: '100%', height: '100%', wExt: w, hExt: h, xExt: w, yExt: h, mapMode: 8 });
-    if (svg) svg.remove();
-    svg = el;
-    svg.setAttribute('preserveAspectRatio', 'none');
-    view.appendChild(svg);
-    hint.style.display = 'none';
-    const b = svg.getBBox();
-    bbox = (b.width > 0 && b.height > 0) ? { x: b.x, y: b.y, w: b.width, h: b.height } : { x: 0, y: 0, w, h };
-    document.getElementById('name').textContent = name || '';
-    document.getElementById('name').title = name || '';
-    document.querySelectorAll('header button').forEach(b => b.disabled = false);
-    fit();
+    if (isEmf(buffer)) loadEmf(buffer, name);
+    else loadSvg(buffer, name);
   } catch (e) {
     console.error(e);
     errorEl.textContent = 'Could not render file: ' + (e.message || e);
   }
+}
+
+function show(el, box, name, url = null) {
+  if (svg) svg.remove();
+  if (blobUrl) URL.revokeObjectURL(blobUrl);
+  blobUrl = url;
+  svg = el;
+  svg.setAttribute('preserveAspectRatio', 'none');
+  view.appendChild(svg);
+  hint.style.display = 'none';
+  bbox = box(svg);
+  document.getElementById('name').textContent = name || '';
+  document.getElementById('name').title = name || '';
+  document.querySelectorAll('header button').forEach(b => b.disabled = false);
+  fit();
+}
+
+function loadEmf(buffer, name) {
+  const dv = new DataView(buffer);
+  // EMF header rclBounds (device units) at offset 8
+  const w = Math.max(1, dv.getInt32(16, true)) || 1000;
+  const h = Math.max(1, dv.getInt32(20, true)) || 1000;
+  const renderer = new EMFJS.Renderer(buffer);
+  const el = renderer.render({ width: '100%', height: '100%', wExt: w, hExt: h, xExt: w, yExt: h, mapMode: 8 });
+  show(el, s => {
+    const b = s.getBBox();
+    return (b.width > 0 && b.height > 0) ? { x: b.x, y: b.y, w: b.width, h: b.height } : { x: 0, y: 0, w, h };
+  }, name);
+}
+
+// Length in px for absolute units; null for percentages or missing values
+function svgLength(v) {
+  const m = /^\s*([+-]?[\d.]+(?:e[+-]?\d+)?)\s*(px|pt|pc|mm|cm|in)?\s*$/i.exec(v || '');
+  if (!m) return null;
+  const k = { px: 1, pt: 4 / 3, pc: 16, mm: 96 / 25.4, cm: 96 / 2.54, in: 96 }[(m[2] || 'px').toLowerCase()];
+  const n = parseFloat(m[1]) * k;
+  return n > 0 ? n : null;
+}
+
+function loadSvg(buffer, name) {
+  const text = new TextDecoder().decode(buffer);
+  const doc = new DOMParser().parseFromString(text, 'image/svg+xml');
+  const root = doc.documentElement;
+  if (doc.querySelector('parsererror') || root.namespaceURI !== SVG_NS || root.localName !== 'svg')
+    throw new Error('not an EMF or SVG file');
+  const vbox = (root.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
+  const hasVb = vbox.length === 4 && vbox[2] > 0 && vbox[3] > 0;
+  let w = svgLength(root.getAttribute('width')), h = svgLength(root.getAttribute('height'));
+  if (!w && !h) [w, h] = hasVb ? [vbox[2], vbox[3]] : [300, 150];
+  else if (!w) w = hasVb ? h * vbox[2] / vbox[3] : 300;
+  else if (!h) h = hasVb ? w * vbox[3] / vbox[2] : 150;
+
+  // Render as an image so scripts and event handlers in the file never run
+  const url = URL.createObjectURL(new Blob([buffer], { type: 'image/svg+xml' }));
+  const el = document.createElementNS(SVG_NS, 'svg');
+  const img = document.createElementNS(SVG_NS, 'image');
+  img.setAttribute('width', w);
+  img.setAttribute('height', h);
+  img.setAttribute('href', url);
+  img.addEventListener('error', () => { errorEl.textContent = 'Could not render file: invalid SVG'; });
+  el.appendChild(img);
+  show(el, () => ({ x: 0, y: 0, w, h }), name, url);
 }
 
 function apply() {
@@ -207,7 +262,7 @@ new ResizeObserver(() => {
 
 function openFile(file) {
   if (!file) return;
-  file.arrayBuffer().then(buf => loadEmf(buf, file.name));
+  file.arrayBuffer().then(buf => load(buf, file.name));
 }
 document.getElementById('file').addEventListener('change', e => openFile(e.target.files[0]));
 view.addEventListener('dragover', e => { e.preventDefault(); view.classList.add('over'); });
@@ -218,9 +273,9 @@ view.addEventListener('drop', e => {
   openFile(e.dataTransfer.files[0]);
 });
 
-// Optional: load a file via ?url=path/to/file.emf
+// Optional: load a file via ?url=path/to/file.emf or .svg
 const url = new URLSearchParams(location.search).get('url');
-if (url) fetch(url).then(r => r.arrayBuffer()).then(buf => loadEmf(buf, url.split('/').pop()))
+if (url) fetch(url).then(r => r.arrayBuffer()).then(buf => load(buf, url.split('/').pop()))
   .catch(e => errorEl.textContent = 'Could not load ' + url + ': ' + e.message);
 </script>
 </body>
